@@ -1,0 +1,24 @@
+[package]
+name = "digital-notebook-desktop"
+version = "1.0.0"
+description = "Digital Notebook — S Pen + Desktop (Tauri 2 Backend)"
+authors = ["Digital Notebook Team"]
+edition = "2021"
+
+[lib]
+name = "digital_notebook_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.1.1", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.41", features = ["full"] }
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1.11", features = ["v4"] }
+local-ip-address = "0.6"

@@ -1,0 +1,15 @@
+{
+  "name": "nebula-ink",
+  "version": "1.0.0",
+  "description": "NebulaInk — Estúdio de escrita vetorial S Pen em tempo real (Samsung Galaxy S24 Ultra + Desktop Server)",
+  "private": true,
+  "workspaces": [
+    "protocol",
+    "desktop-app"
+  ],
+  "scripts": {
+    "dev": "npm.cmd --prefix desktop-app run dev",
+    "build": "npm.cmd --prefix desktop-app run build",
+    "test": "npm.cmd --prefix desktop-app test"
+  }
+}

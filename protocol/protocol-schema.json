@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DigitalNotebookProtocolMessage",
+  "description": "Formal JSON Schema for the Digital Notebook S Pen + Desktop WebSocket communication protocol.",
+  "type": "object",
+  "required": ["type", "timestamp", "payload"],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "session.start",
+        "session.resume",
+        "stroke.begin",
+        "stroke.points",
+        "stroke.end",
+        "strokes.erase",
+        "operation.undo",
+        "operation.redo",
+        "page.select",
+        "operation.ack",
+        "session.error"
+      ]
+    },
+    "timestamp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "payload": {
+      "type": "object"
+    }
+  }
+}

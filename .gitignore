@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs (Web, Desktop, Tauri, Rust)
+dist/
+**/dist/
+build/
+**/build/
+target/
+**/target/
+.vite/
+**/.vite/
+*.tsbuildinfo
+
+# Local SQLite databases & WAL files
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Android / Gradle / Kotlin
+.gradle/
+**/.gradle/
+local.properties
+**/local.properties
+.cxx/
+**/.cxx/
+.kotlin/
+**/.kotlin/
+captures/
+*.apk
+*.aab
+*.ap_
+*.aab
+*.dex
+*.class
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# IDEs & Editors
+.idea/
+**/.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+
+# Logs & OS artifacts
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
