@@ -11,6 +11,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "cloudflared": "^0.7.3",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

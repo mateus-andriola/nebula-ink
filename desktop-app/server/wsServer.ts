@@ -41,6 +41,7 @@ export interface PendingDeviceApproval {
 export interface ServerStatusSnapshot {
   port: number;
   preferredHost: string;
+  publicTunnelUrl?: string | null;
   candidateHosts: string[];
   activeNotebookId: string;
   activePageId: string;
@@ -114,6 +115,7 @@ export class DigitalNotebookLocalServer {
   private wss: WebSocketServer | null = null;
   private port = 0;
   private selectedHost: string;
+  private publicTunnelHost: string | null = null;
   private requireExplicitApproval = false;
 
   private activeNotebookId = 'nb_default';
@@ -262,6 +264,20 @@ export class DigitalNotebookLocalServer {
     this.selectedHost = host;
   }
 
+  public setPublicTunnelHost(host: string | null): void {
+    const cleaned = host
+      ? host.replace(/^https?:\/\//i, '').replace(/^wss?:\/\//i, '').replace(/\/+$/, '')
+      : null;
+    this.publicTunnelHost = cleaned;
+    if (cleaned) {
+      this.selectedHost = cleaned;
+    }
+    this.broadcastDesktopEvent({
+      event: 'status.updated',
+      status: this.getStatusSnapshot(),
+    });
+  }
+
   public setRequireExplicitApproval(requireApproval: boolean): void {
     this.requireExplicitApproval = requireApproval;
     this.broadcastDesktopEvent({
@@ -271,7 +287,7 @@ export class DigitalNotebookLocalServer {
   }
 
   /**
-   * Gera um novo QR Code de pareamento com token temporário (validade de 5 minutos, uso único).
+   * Gera um novo QR Code de pareamento com token temporário (validade de 5 minutos).
    */
   public generatePairingQrPayload(ttlMs = 5 * 60 * 1000): PairingQrPayload {
     const token = `tkn_${randomBytes(12).toString('hex')}`;
@@ -284,13 +300,26 @@ export class DigitalNotebookLocalServer {
     this.currentPairingToken = entry;
     this.pairingTokens.set(token, entry);
 
-    const { candidates } = discoverLanIPv4Candidates();
+    const { candidates: lanCandidates } = discoverLanIPv4Candidates();
+    const isTunnelHost =
+      (this.publicTunnelHost !== null && this.selectedHost === this.publicTunnelHost) ||
+      this.selectedHost.includes('.trycloudflare.com') ||
+      this.selectedHost.includes('.ngrok') ||
+      this.selectedHost.includes('.loca.lt');
+
+    // Candidate hosts inherit the QR code's protocol and port in the Android
+    // parser. A WSS tunnel uses :443, so advertising LAN IPs here would make
+    // the phone try wss://<lan-ip>:443 instead of the local WS port.
+    const allCandidates = isTunnelHost
+      ? [this.selectedHost]
+      : lanCandidates.filter((v, i, a) => a.indexOf(v) === i);
+
     return {
       v: 1,
       host: this.selectedHost,
-      candidates,
-      port: this.port,
-      protocol: 'ws',
+      candidates: allCandidates,
+      port: isTunnelHost ? 443 : this.port,
+      protocol: isTunnelHost ? 'wss' : 'ws',
       pairingToken: token,
       expiresAt,
     };
@@ -345,7 +374,12 @@ export class DigitalNotebookLocalServer {
   }
 
   public getStatusSnapshot(): ServerStatusSnapshot {
-    const { candidates } = discoverLanIPv4Candidates();
+    const { candidates: lanCandidates } = discoverLanIPv4Candidates();
+    const candidateHosts = [
+      ...(this.publicTunnelHost ? [this.publicTunnelHost] : []),
+      ...lanCandidates,
+    ].filter((v, i, a) => a.indexOf(v) === i);
+
     let connectedMobileCount = 0;
     for (const ctx of this.mobileClients.values()) {
       if (ctx.authenticated && ctx.approved) {
@@ -356,7 +390,8 @@ export class DigitalNotebookLocalServer {
     return {
       port: this.port,
       preferredHost: this.selectedHost,
-      candidateHosts: candidates,
+      publicTunnelUrl: this.publicTunnelHost ? `wss://${this.publicTunnelHost}` : null,
+      candidateHosts,
       activeNotebookId: this.activeNotebookId,
       activePageId: this.activePageId,
       connectedMobileCount,

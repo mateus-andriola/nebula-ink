@@ -1216,7 +1216,7 @@ export function App(): React.ReactElement {
                 />
                 <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px' }}>
                   <div>
-                    <strong>Servidor:</strong> ws://{pairingData.qr.host}:{pairingData.qr.port}
+                    <strong>Servidor:</strong> {pairingData.qr.protocol}://{pairingData.qr.host}:{pairingData.qr.port}
                   </div>
                   <div>
                     <strong>Token Temporário:</strong> <code>{pairingData.qr.pairingToken}</code>
