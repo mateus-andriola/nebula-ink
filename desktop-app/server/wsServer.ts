@@ -18,6 +18,7 @@ import {
   type SessionErrorCode,
   type Stroke,
   type StrokePoint,
+  type ViewportUpdatePayload,
   parseAndValidateProtocolMessage,
   serializeProtocolMessage,
 } from '../../protocol/src/index.ts';
@@ -127,6 +128,9 @@ export class DigitalNotebookLocalServer {
   private readonly desktopUiClients = new Set<WebSocket>();
   private readonly pendingApprovals = new Map<string, PendingDeviceApproval>();
   private readonly activeProvisionalStrokes = new Map<string, Stroke>();
+  private activeMirrorViewport: ViewportUpdatePayload | null = null;
+  private activeMirrorDeviceId: string | null = null;
+  private desktopDisplayBounds: { width: number; height: number } | null = null;
 
   constructor(options?: {
     dbFilePath?: string;
@@ -165,10 +169,15 @@ export class DigitalNotebookLocalServer {
 
     this.wss = new WebSocketServer({
       server: this.httpServer,
-      maxPayload: MAX_MESSAGE_BYTES * 2, // Deixa o validador emitir PAYLOAD_TOO_LARGE estruturado até 1MB
+      maxPayload: MAX_MESSAGE_BYTES * 2, // Permite validar operações longas antes de rejeitar mensagens excessivas.
     });
 
     this.wss.on('connection', (ws, req) => {
+      // A message above ws.maxPayload emits an error on the socket; keep a
+      // disconnected mobile client from terminating the desktop host process.
+      ws.on('error', (error) => {
+        console.warn('[NebulaInk Server] WebSocket client error:', error.message);
+      });
       const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
       if (url.searchParams.get('client') === 'desktop-ui') {
         this.desktopUiClients.add(ws);
@@ -183,6 +192,9 @@ export class DigitalNotebookLocalServer {
             activePage: this.db.getPageSnapshot(this.activePageId),
           })
         );
+        if (this.activeMirrorViewport) {
+          ws.send(JSON.stringify({ event: 'viewport.updated', ...this.activeMirrorViewport }));
+        }
         return;
       }
 
@@ -208,6 +220,12 @@ export class DigitalNotebookLocalServer {
 
       ws.on('close', () => {
         this.mobileClients.delete(ws);
+        if (this.activeMirrorViewport && this.activeMirrorDeviceId === ctx.deviceId) {
+          const inactiveViewport = { ...this.activeMirrorViewport, active: false };
+          this.activeMirrorViewport = null;
+          this.activeMirrorDeviceId = null;
+          this.broadcastDesktopEvent({ event: 'viewport.updated', ...inactiveViewport });
+        }
         if (ctx.deviceId) {
           this.pendingApprovals.delete(ctx.deviceId);
         }
@@ -809,6 +827,19 @@ export class DigitalNotebookLocalServer {
         this.broadcastMobileStateSync(ws);
         break;
       }
+
+      case 'viewport.update': {
+        if (msg.payload.active) {
+          this.activeMirrorViewport = msg.payload;
+          this.activeMirrorDeviceId = ctx.deviceId;
+          this.broadcastDesktopEvent({ event: 'viewport.updated', ...msg.payload });
+        } else if (this.activeMirrorDeviceId === ctx.deviceId) {
+          this.activeMirrorViewport = null;
+          this.activeMirrorDeviceId = null;
+          this.broadcastDesktopEvent({ event: 'viewport.updated', ...msg.payload });
+        }
+        break;
+      }
     }
   }
 
@@ -837,6 +868,22 @@ export class DigitalNotebookLocalServer {
       },
     };
     ws.send(serializeProtocolMessage(reply));
+    this.sendDisplayBounds(ws);
+  }
+
+  private sendDisplayBounds(ws: WebSocket): void {
+    if (!this.desktopDisplayBounds || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({
+      type: 'display.bounds',
+      timestamp: Date.now(),
+      payload: this.desktopDisplayBounds,
+    }));
+  }
+
+  private broadcastDisplayBounds(): void {
+    for (const [ws, ctx] of this.mobileClients.entries()) {
+      if (ctx.authenticated && ctx.approved) this.sendDisplayBounds(ws);
+    }
   }
 
   private sendOperationAck(
@@ -943,6 +990,27 @@ export class DigitalNotebookLocalServer {
         notebooks: this.db.listNotebooks(),
         activePage: this.db.getPageSnapshot(this.activePageId),
       });
+      return;
+    }
+
+    if (req.method === 'POST' && pathname === '/api/screen/bounds') {
+      const body = await readJsonBody();
+      const width = Number(body.width);
+      const height = Number(body.height);
+      if (
+        !Number.isFinite(width) ||
+        !Number.isFinite(height) ||
+        width <= 0 ||
+        height <= 0 ||
+        width > 32768 ||
+        height > 32768
+      ) {
+        sendJson(400, { error: 'Invalid screen bounds.' });
+        return;
+      }
+      this.desktopDisplayBounds = { width, height };
+      this.broadcastDisplayBounds();
+      sendJson(200, { bounds: this.desktopDisplayBounds });
       return;
     }
 

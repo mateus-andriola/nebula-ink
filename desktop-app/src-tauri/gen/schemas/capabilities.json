@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Permite o app principal criar e fechar a janela de reflexo do celular.","local":true,"windows":["main","phone-reflection"],"permissions":["core:default","core:webview:allow-create-webview-window","core:window:allow-close","core:window:allow-set-fullscreen","core:window:allow-set-position","core:window:allow-set-size"]}}

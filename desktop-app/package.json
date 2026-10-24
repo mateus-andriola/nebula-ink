@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:mac": "tauri build --bundles dmg"
   },
   "dependencies": {
     "cloudflared": "^0.7.3",

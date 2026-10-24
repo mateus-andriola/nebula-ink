@@ -24,6 +24,8 @@ export class Canvas2DRenderer {
   private lastScale = -1;
   private lastPanX = Number.NaN;
   private lastPanY = Number.NaN;
+  private lastProjectionScaleX = Number.NaN;
+  private lastProjectionScaleY = Number.NaN;
   private lastPageWidth = DEFAULT_PAGE_WIDTH;
   private lastPageHeight = DEFAULT_PAGE_HEIGHT;
   private lastStrokesRef: Stroke[] | null = null;
@@ -41,7 +43,9 @@ export class Canvas2DRenderer {
     viewport: ViewportTransform;
     pageWidth?: number;
     pageHeight?: number;
+    viewportProjection?: { scaleX: number; scaleY: number };
     eraserPreview?: { x: number; y: number; radius: number } | null;
+    transparent?: boolean;
   }): void {
     const {
       canvas,
@@ -52,7 +56,9 @@ export class Canvas2DRenderer {
       viewport,
       pageWidth = DEFAULT_PAGE_WIDTH,
       pageHeight = DEFAULT_PAGE_HEIGHT,
+      viewportProjection = { scaleX: 1, scaleY: 1 },
       eraserPreview,
+      transparent = false,
     } = options;
 
     const ctx = canvas.getContext('2d');
@@ -61,6 +67,16 @@ export class Canvas2DRenderer {
     const width = canvas.width;
     const height = canvas.height;
     if (width <= 0 || height <= 0) return;
+    const applyViewport = (target: CanvasRenderingContext2D): void => {
+      target.translate(
+        viewport.panX * viewportProjection.scaleX,
+        viewport.panY * viewportProjection.scaleY
+      );
+      target.scale(
+        viewport.scale * viewportProjection.scaleX,
+        viewport.scale * viewportProjection.scaleY
+      );
+    };
 
     if (!this.committedLayer || this.lastWidth !== width || this.lastHeight !== height) {
       this.committedLayer = document.createElement('canvas');
@@ -76,6 +92,8 @@ export class Canvas2DRenderer {
       this.lastScale !== viewport.scale ||
       this.lastPanX !== viewport.panX ||
       this.lastPanY !== viewport.panY ||
+      this.lastProjectionScaleX !== viewportProjection.scaleX ||
+      this.lastProjectionScaleY !== viewportProjection.scaleY ||
       this.lastPageWidth !== pageWidth ||
       this.lastPageHeight !== pageHeight ||
       this.lastStrokesRef !== committedStrokes
@@ -84,6 +102,8 @@ export class Canvas2DRenderer {
       this.lastScale = viewport.scale;
       this.lastPanX = viewport.panX;
       this.lastPanY = viewport.panY;
+      this.lastProjectionScaleX = viewportProjection.scaleX;
+      this.lastProjectionScaleY = viewportProjection.scaleY;
       this.lastPageWidth = pageWidth;
       this.lastPageHeight = pageHeight;
       this.lastStrokesRef = committedStrokes;
@@ -91,33 +111,36 @@ export class Canvas2DRenderer {
 
     // 1. Limpar área externa da viewport (Modo Dark)
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = '#020617';
-    ctx.fillRect(0, 0, width, height);
+    if (!transparent) {
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, width, height);
+    }
 
-    // 2. Desenhar folha lógica escura (Vertical ou Horizontal) e grade pontilhada
+    // 2. Desenhar a folha apenas no modo caderno; o espelho mantém fundo transparente.
     ctx.save();
-    ctx.translate(viewport.panX, viewport.panY);
-    ctx.scale(viewport.scale, viewport.scale);
+    applyViewport(ctx);
 
-    // Sombra da página
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-    ctx.fillRect(6, 8, pageWidth, pageHeight);
+    if (!transparent) {
+      // Sombra da página
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(6, 8, pageWidth, pageHeight);
 
-    // Folha escura (#0F172A por padrão no modo dark)
-    const isLightDefaultBg =
-      !backgroundColor ||
-      backgroundColor.toUpperCase() === '#FFFFFF' ||
-      backgroundColor.toUpperCase() === '#F8FAFC';
-    ctx.fillStyle = isLightDefaultBg ? '#0F172A' : backgroundColor;
-    ctx.fillRect(0, 0, pageWidth, pageHeight);
+      // Folha escura (#0F172A por padrão no modo dark)
+      const isLightDefaultBg =
+        !backgroundColor ||
+        backgroundColor.toUpperCase() === '#FFFFFF' ||
+        backgroundColor.toUpperCase() === '#F8FAFC';
+      ctx.fillStyle = isLightDefaultBg ? '#0F172A' : backgroundColor;
+      ctx.fillRect(0, 0, pageWidth, pageHeight);
 
-    // Borda nítida da folha escura
-    ctx.strokeStyle = '#334155';
-    ctx.lineWidth = 1.5 / viewport.scale;
-    ctx.strokeRect(0, 0, pageWidth, pageHeight);
+      // Borda nítida da folha escura
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5 / viewport.scale;
+      ctx.strokeRect(0, 0, pageWidth, pageHeight);
 
-    if (grid.enabled) {
-      this.drawDottedGrid(ctx, grid, pageWidth, pageHeight);
+      if (grid.enabled) {
+        this.drawDottedGrid(ctx, grid, pageWidth, pageHeight);
+      }
     }
     ctx.restore();
 
@@ -125,8 +148,7 @@ export class Canvas2DRenderer {
     if (this.committedDirty && this.committedCtx && this.committedLayer) {
       this.committedCtx.clearRect(0, 0, width, height);
       this.committedCtx.save();
-      this.committedCtx.translate(viewport.panX, viewport.panY);
-      this.committedCtx.scale(viewport.scale, viewport.scale);
+      applyViewport(this.committedCtx);
       for (const stroke of committedStrokes) {
         this.drawStroke(this.committedCtx, stroke);
       }
@@ -141,8 +163,7 @@ export class Canvas2DRenderer {
     // 4. Desenhar traços provisórios (em andamento em tempo real via WebSocket ou S Pen local)
     if (provisionalStrokes.size > 0) {
       ctx.save();
-      ctx.translate(viewport.panX, viewport.panY);
-      ctx.scale(viewport.scale, viewport.scale);
+      applyViewport(ctx);
       for (const stroke of provisionalStrokes.values()) {
         this.drawStroke(ctx, stroke);
       }
@@ -152,8 +173,7 @@ export class Canvas2DRenderer {
     // 5. Indicador de raio da borracha por traço inteiro
     if (eraserPreview) {
       ctx.save();
-      ctx.translate(viewport.panX, viewport.panY);
-      ctx.scale(viewport.scale, viewport.scale);
+      applyViewport(ctx);
       ctx.beginPath();
       ctx.arc(eraserPreview.x, eraserPreview.y, eraserPreview.radius, 0, Math.PI * 2);
       ctx.strokeStyle = '#EF4444';

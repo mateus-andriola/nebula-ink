@@ -1,6 +1,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
+import { isTauri } from '@tauri-apps/api/core';
 import { App } from './App.tsx';
+import { DesktopHostApp } from './renderer/DesktopHostApp.tsx';
+import { ScreenReflectionApp } from './renderer/ScreenReflectionApp.tsx';
 import './styles.css';
 
 class RootErrorBoundary extends React.Component<
@@ -59,10 +62,18 @@ if (!container) {
 }
 
 const root = createRoot(container);
+const isReflectionWindow = new URLSearchParams(window.location.search).get('reflection') === '1';
+const isNativeDesktop = isTauri();
 root.render(
   <React.StrictMode>
     <RootErrorBoundary>
-      <App />
+      {isReflectionWindow ? (
+        <ScreenReflectionApp />
+      ) : isNativeDesktop ? (
+        <DesktopHostApp />
+      ) : (
+        <App />
+      )}
     </RootErrorBoundary>
   </React.StrictMode>
 );

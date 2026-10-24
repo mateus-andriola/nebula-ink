@@ -59,26 +59,35 @@ pub async fn run_ws_server(
                         .get("pairingToken")
                         .and_then(|v| v.as_str())
                         .unwrap_or("");
-                    let mut token_guard = token_clone.lock().unwrap();
-                    if let Some((expected, _exp, used)) = token_guard.as_mut() {
-                        if expected == req_token && !*used {
-                            *used = true;
-                            authenticated = true;
-                            let reply = json!({
-                                "type": "session.start",
-                                "timestamp": 0,
-                                "payload": {
-                                    "role": "server",
-                                    "sessionId": "sess_rust_1",
-                                    "sessionResumeToken": "res_rust_token",
-                                    "approved": true,
-                                    "activeNotebookId": "nb_default",
-                                    "activePageId": "page_default_1"
-                                }
-                            });
-                            let _ = write.send(Message::Text(reply.to_string().into())).await;
-                            continue;
+                    let accepted = {
+                        let mut token_guard = token_clone.lock().unwrap();
+                        if let Some((expected, _exp, used)) = token_guard.as_mut() {
+                            if expected == req_token && !*used {
+                                *used = true;
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
                         }
+                    };
+                    if accepted {
+                        authenticated = true;
+                        let reply = json!({
+                            "type": "session.start",
+                            "timestamp": 0,
+                            "payload": {
+                                "role": "server",
+                                "sessionId": "sess_rust_1",
+                                "sessionResumeToken": "res_rust_token",
+                                "approved": true,
+                                "activeNotebookId": "nb_default",
+                                "activePageId": "page_default_1"
+                            }
+                        });
+                        let _ = write.send(Message::Text(reply.to_string().into())).await;
+                        continue;
                     }
                     let err_env = json!({
                         "type": "session.error",

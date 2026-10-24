@@ -4,20 +4,34 @@
   "version": "1.0.0",
   "identifier": "com.nebulaink.desktop",
   "build": {
-    "beforeDevCommand": "npm.cmd run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm.cmd run build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
+  },
+  "bundle": {
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   },
   "app": {
     "windows": [
       {
-        "title": "NebulaInk — S Pen Vector Studio",
-        "width": 1360,
-        "height": 880,
-        "minWidth": 960,
-        "minHeight": 640,
-        "resizable": true
+        "title": "NebulaInk — Escrita sobre a tela",
+        "width": 560,
+        "height": 720,
+        "minWidth": 520,
+        "minHeight": 680,
+        "resizable": false
       }
     ],
     "security": {

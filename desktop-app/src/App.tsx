@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { isTauri, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   type ActiveUiTool,
   DEFAULT_GRID_SETTINGS,
@@ -33,6 +36,76 @@ const PRESET_COLORS = [
   '#FBBF24', // Âmbar / Amarelo
 ];
 
+let reflectionWindowOpening = false;
+let reflectionWindowKnown = false;
+let reflectionWindowDesired = false;
+let reflectionWindowSuppressed = false;
+async function synchronizeReflectionWindow(active: boolean, viewWidth: number, viewHeight: number): Promise<void> {
+  if (!isTauri()) return;
+  reflectionWindowDesired = active;
+  if (!active) {
+    reflectionWindowSuppressed = false;
+    const existing = await WebviewWindow.getByLabel('phone-reflection');
+    reflectionWindowKnown = false;
+    reflectionWindowOpening = false;
+    if (existing) await existing.close();
+    return;
+  }
+  if (reflectionWindowSuppressed) return;
+  if (reflectionWindowKnown || reflectionWindowOpening) return;
+  reflectionWindowOpening = true;
+  const existing = await WebviewWindow.getByLabel('phone-reflection');
+  if (!reflectionWindowDesired) {
+    reflectionWindowOpening = false;
+    return;
+  }
+  if (existing) {
+    reflectionWindowKnown = true;
+    reflectionWindowOpening = false;
+    return;
+  }
+  const width = 420;
+  const height = Math.max(576, Math.min(996, width * viewHeight / Math.max(1, viewWidth) + 36));
+  const created = new WebviewWindow('phone-reflection', {
+    url: 'index.html?reflection=1',
+    title: 'NebulaInk — Reflexo do celular',
+    width,
+    height,
+    resizable: false,
+    decorations: true,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focus: false,
+    focusable: false,
+    visible: false,
+  });
+  void created.once('tauri://created', () => {
+    reflectionWindowKnown = true;
+    if (reflectionWindowDesired) {
+      void invoke('set_reflection_click_through', { enabled: true })
+        .then(() => { reflectionWindowOpening = false; })
+        .catch(() => {
+          reflectionWindowOpening = false;
+          reflectionWindowKnown = false;
+          void created.close();
+        });
+    } else {
+      reflectionWindowOpening = false;
+      void created.close();
+    }
+  });
+  void created.once('tauri://error', () => {
+    reflectionWindowOpening = false;
+    reflectionWindowKnown = false;
+  });
+  void created.once('tauri://destroyed', () => {
+    reflectionWindowKnown = false;
+    reflectionWindowOpening = false;
+    if (reflectionWindowDesired) reflectionWindowSuppressed = true;
+  });
+}
+
 export function App(): React.ReactElement {
   const [serverStatus, setServerStatus] = useState<ServerStatusInfo | null>(null);
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
@@ -43,7 +116,7 @@ export function App(): React.ReactElement {
   // Estado de ferramentas e preferências (espelhando o modelo S Pen)
   const [activeTool, setActiveTool] = useState<ActiveUiTool>('pen');
   const [penColor, setPenColor] = useState<string>(PRESET_COLORS[0]!);
-  const [penWidth, setPenWidth] = useState<number>(3.5);
+  const [penWidth, setPenWidth] = useState<number>(1.75);
   const [eraserRadius, setEraserRadius] = useState<number>(14.0);
   const [simulateSPenButtonHeld, setSimulateSPenButtonHeld] = useState<boolean>(false);
   const [inputPrefs, setInputPrefs] = useState<InputPreferences>(() => {
@@ -117,6 +190,13 @@ export function App(): React.ReactElement {
 
   // Inicializar e escutar eventos em tempo real do servidor Desktop
   useEffect(() => {
+    let unlistenReflection: (() => void) | undefined;
+    if (isTauri()) {
+      void listen('reflection:user-closed', () => {
+        reflectionWindowSuppressed = true;
+        reflectionWindowKnown = false;
+      }).then((unlisten) => { unlistenReflection = unlisten; });
+    }
     desktopBridge
       .fetchState()
       .then((initial) => {
@@ -187,11 +267,16 @@ export function App(): React.ReactElement {
             applyIncomingPageSnapshot(ev.snapshot);
           }
           break;
+
+        case 'viewport.updated':
+          void synchronizeReflectionWindow(ev.active, ev.viewWidth, ev.viewHeight);
+          break;
       }
     });
 
     return () => {
       unsubscribe();
+      unlistenReflection?.();
     };
   }, []);
 
@@ -1005,8 +1090,8 @@ export function App(): React.ReactElement {
                 <span>Espessura: {penWidth.toFixed(1)}pt</span>
                 <input
                   type="range"
-                  min={1.0}
-                  max={18.0}
+                  min={0.5}
+                  max={9.0}
                   step={0.5}
                   value={penWidth}
                   onChange={(e) => setPenWidth(Number(e.target.value))}

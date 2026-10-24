@@ -99,5 +99,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
+    watch: {
+      // Cargo compiles native dependencies here while Vite is running. These
+      // generated files can be locked by the linker on Windows, so keep them
+      // out of Vite's filesystem watcher.
+      ignored: ['**/src-tauri/target/**'],
+    },
   },
 });

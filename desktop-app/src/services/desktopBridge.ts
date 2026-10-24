@@ -10,6 +10,7 @@ import {
   type PairingQrPayload,
   type Stroke,
   type StrokePoint,
+  type ViewportUpdatePayload,
 } from '../../../protocol/src/index.ts';
 
 export interface ServerStatusInfo {
@@ -72,7 +73,8 @@ export type DesktopServerEvent =
       pageId: string;
       notebooks: NotebookSummary[];
       snapshot: PageStateSnapshot | null;
-    };
+    }
+  | ({ event: 'viewport.updated' } & ViewportUpdatePayload);
 
 const DEFAULT_API_BASE = 'http://127.0.0.1:8765';
 const DEFAULT_WS_URL = 'ws://127.0.0.1:8765?client=desktop-ui';
@@ -148,6 +150,15 @@ export class DesktopBackendBridge {
       notebooks: NotebookSummary[];
       activePage: PageStateSnapshot | null;
     };
+  }
+
+  public async updateScreenBounds(width: number, height: number): Promise<void> {
+    const res = await fetch(`${DEFAULT_API_BASE}/api/screen/bounds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ width, height }),
+    });
+    if (!res.ok) throw new Error('Failed to update desktop screen bounds');
   }
 
   public async generatePairingQr(options?: {
